@@ -1,9 +1,10 @@
 # CS236G_VerifyGAN
 Code for CS236G course project on using GANs to verify image-based controllers.
+
 **Contributors**: Sydney Katz, Anthony Corso, Chris Strong
 
 ## data
-The data folder contains two datasets from images of a runway taken from a camera angle of the right wing of a Cessna 208B Grand Caravan taxiing down runway 04 of Grant County International Airport in the X-Plane 11 flight simulator. The images are downsampled to 16x8 images and converted to grayscale.
+The data folder contains two datasets from images of a runway taken from a camera angle of the right wing of a Cessna 208B Grand Caravan taxiing down runway 04 of Grant County International Airport in the [X-Plane 11 flight simulator](https://www.x-plane.com/). The images are downsampled to 16x8 images and converted to grayscale.
 
 `KJ_DownsampledTrainingData.h5` - original data used to train the image-based neural controller for taxiing down the runway; created by running snaking trajectories down the entire runway. The X data contains the images and the y values are crosstrack error (meters) and heading error (degrees) respectively.
 
