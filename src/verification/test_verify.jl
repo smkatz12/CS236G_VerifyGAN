@@ -1,6 +1,6 @@
 include("verify.jl")
 
-network = read_nnet("../../models/full_small_normal_v2.nnet")
+network = read_nnet("../../models/full_big_normal_v2.nnet")
 
 num_inp = size(network.layers[1].weights, 2)
 strategy = MIPVerify.mip
