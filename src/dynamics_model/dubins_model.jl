@@ -43,9 +43,22 @@ function sim_steps(x, θ, ϕ; dt = 0.05, num_steps = 20)
     return x, θ
 end
 
+function sim_steps(x, θ, y, ϕ; dt = 0.05, num_steps = 20)
+    for i = 1:num_steps
+		x, θ, y = next_state(x, θ, y, ϕ)
+	end
+    return x, θ, y
+end
+
 # NOTE: this function is only valid for θs between -90 and 90 degrees
 function reachable_cell(lbs, ubs, ϕ_min, ϕ_max)
 	next_lb_x, next_lb_θ = sim_steps(lbs[1], lbs[2], ϕ_min)
 	next_ub_x, next_ub_θ = sim_steps(ubs[1], ubs[2], ϕ_max)
 	return [next_lb_x, next_lb_θ], [next_ub_x, next_ub_θ]
+end
+
+function reachable_cell_dtp(lbs, ubs, ϕ_min, ϕ_max; num_steps = 20)
+	next_lb_x, next_lb_θ, next_lb_y = sim_steps(lbs[1], lbs[2], lbs[3], ϕ_min, num_steps = num_steps)
+	next_ub_x, next_ub_θ, next_ub_y = sim_steps(ubs[1], ubs[2], ubs[3], ϕ_max, num_steps = num_steps)
+	return [next_lb_x, next_lb_θ, next_lb_y], [next_ub_x, next_ub_θ, next_ub_y]
 end

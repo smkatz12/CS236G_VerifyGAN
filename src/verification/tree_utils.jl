@@ -40,6 +40,98 @@ function get_leaf(root_node, point)
     return curr_node
 end
 
+function get_bounds(tree)
+    lbs = []
+    ubs = []
+    
+    lb_s = Stack{Vector{Float64}}()
+    ub_s = Stack{Vector{Float64}}()
+    s = Stack{Union{LEAFNODE, KDNODE}}()
+
+    push!(lb_s, tree.lbs)
+    push!(ub_s, tree.ubs)
+    push!(s, tree.root_node)
+
+    while !isempty(s)
+        curr = pop!(s)
+        curr_lbs = pop!(lb_s)
+        curr_ubs = pop!(ub_s)
+
+        if typeof(curr) == LEAFNODE
+            push!(lbs, curr_lbs)
+            push!(ubs, curr_ubs)
+        else
+            # Traverse tree and keep track of bounds
+            dim = curr.dim
+            split = curr.split
+            # Go left, upper bounds will change
+            left_ubs = copy(curr_ubs)
+            left_ubs[dim] = split
+
+            push!(lb_s, curr_lbs)
+            push!(ub_s, left_ubs)
+            push!(s, curr.left)
+
+            # Go right, lower bounds will change
+            right_lbs = copy(curr_lbs)
+            right_lbs[dim] = split
+            
+            push!(lb_s, right_lbs)
+            push!(ub_s, curr_ubs)
+            push!(s, curr.right)
+        end
+    end
+
+    return lbs, ubs
+end
+
+function get_bounds_and_probs(tree)
+    lbs = []
+    ubs = []
+    probs = []
+    
+    lb_s = Stack{Vector{Float64}}()
+    ub_s = Stack{Vector{Float64}}()
+    s = Stack{Union{LEAFNODE, KDNODE}}()
+
+    push!(lb_s, tree.lbs)
+    push!(ub_s, tree.ubs)
+    push!(s, tree.root_node)
+
+    while !isempty(s)
+        curr = pop!(s)
+        curr_lbs = pop!(lb_s)
+        curr_ubs = pop!(ub_s)
+
+        if typeof(curr) == LEAFNODE
+            push!(lbs, curr_lbs)
+            push!(ubs, curr_ubs)
+            push!(probs, curr.prob)
+        else
+            # Traverse tree and keep track of bounds
+            dim = curr.dim
+            split = curr.split
+            # Go left, upper bounds will change
+            left_ubs = copy(curr_ubs)
+            left_ubs[dim] = split
+
+            push!(lb_s, curr_lbs)
+            push!(ub_s, left_ubs)
+            push!(s, curr.left)
+
+            # Go right, lower bounds will change
+            right_lbs = copy(curr_lbs)
+            right_lbs[dim] = split
+            
+            push!(lb_s, right_lbs)
+            push!(ub_s, curr_ubs)
+            push!(s, curr.right)
+        end
+    end
+
+    return lbs, ubs, probs
+end
+
 function get_overlapping_nodes(root_node, lbs, ubs)
     curr_node_list = Vector{LEAFNODE}()
     overlapping_nodes_helper(root_node, lbs, ubs, curr_node_list)
