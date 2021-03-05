@@ -93,7 +93,7 @@ verify_tree!(tree, mipverify_network, num_inp, main_solver, tightening_solver)
 To run probabilistic model checking on the tree, run:
 
 ```julia
-label_tree_failures!(tree);
+label_tree_failures!(tree)
 model_check!(tree)
 ```
 
@@ -102,7 +102,7 @@ To run forward reachability analysis, run:
 ```julia
 lbs = [-30.0, -11.0] # Lower bounds of region of start states
 ubs = [30.0, 11.0] # Upper bounds of region of start states
-label_start_states!(tree, lbs, ubs);
+label_start_states!(tree, lbs, ubs)
 trees = forward_reach(tree)
 ```
 
