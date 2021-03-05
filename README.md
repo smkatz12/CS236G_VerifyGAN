@@ -67,4 +67,43 @@ end
 The python files to interface with the XPlane simulator are contained in the `src/xplane_interface` folder. More information about the `xpc3.py` file created by NASA X-Plane Connect can be found [here](https://github.com/nasa/XPlaneConnect). Other notable files include `genGANData.py` and `SK_genTrainingData.py`, which are used to generate and downsample the GAN training data respectively. The `sim_network.py` file allows us to simulate our simple dynamics model using X-Plane 11 images to drive the controller.
 
 ## verification
-The verification code relies on the [MIPVerifyWrapper](https://github.com/castrong/MIPVerifyWrapper) repository. The `verify.jl` file located in `src/verification` loads in the necessary files from MIPVerifyWrapper and contains a function for computing the minimum and maximum control output over a given region in the generator's input space.
+The verification code relies on the [MIPVerifyWrapper](https://github.com/castrong/MIPVerifyWrapper) repository. The `verify.jl` file located in `src/verification` loads in the necessary files from MIPVerifyWrapper and contains a functions for computing the minimum and maximum control output over a given region in the generator's input space and for doing so for each cell in an input space.
+
+To divide up the input space and run verification, run the following lines of code:
+
+```julia
+include("verify.jl")
+
+network = read_nnet("../../models/full_big_normal_v2.nnet")
+
+num_inp = size(network.layers[1].weights, 2)
+strategy = MIPVerify.mip
+timeout_per_node = 0.5
+main_timeout = 10.0
+mipverify_network = network_to_mipverify_network(network, "test", strategy)
+
+max_widths = [0.2, 0.5] # Maximum cell widths
+lbs = [-11.0, -30.0]
+ubs = [11.0, 30.0]
+
+tree = create_tree(max_widths, lbs, ubs)
+verify_tree!(tree, mipverify_network, num_inp, main_solver, tightening_solver)
+```
+
+To run probabilistic model checking on the tree, run:
+
+```julia
+label_tree_failures!(tree);
+model_check!(tree)
+```
+
+To run forward reachability analysis, run:
+
+```julia
+lbs = [-30.0, -11.0] # Lower bounds of region of start states
+ubs = [30.0, 11.0] # Upper bounds of region of start states
+label_start_states!(tree, lbs, ubs);
+trees = forward_reach(tree)
+```
+
+The `viz/` folder contains code for plotting the results.
