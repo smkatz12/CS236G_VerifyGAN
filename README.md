@@ -32,7 +32,7 @@ The control network that takes in a downsampled runway image and predicts crosst
 There are currently two full models consisting on the big MLP and small MLP generator concatenated with the taxinet control network (they go from two latent variables and the crosstrack and heading error to a prediction of the crosstrack and heading error) in both formats as well.
 
 ## gan training
-The code for training the GANs as well as some of the saved generators can be found in `src/gan_training`. The file `cGAN_common.jl` contains functions for training a conditional GAN, the file `spectral_norm.jl` implements spectral normalization layers in Flux to be used by the discriminator, and the file `taxi_models_and_data` implements functions specific to the taxinet problem and is the main file to call for training the GAN.
+The code for training the GANs as well as some of the saved generators can be found in `src/gan_training`. The file `reconstruction.jl` contains the code for training a reconstruction loss baseline. The file `cGAN_common.jl` contains functions for training a conditional GAN, the file `spectral_norm.jl` implements spectral normalization layers in Flux to be used by the discriminator, and the file `taxi_models_and_data` implements functions specific to the taxinet problem and is the main file to call for training the GAN. The `train_smaller_generator` file contains the code to train a smaller generator in a superivised learning fashion.
 
 To run the training code, ensure that all necessary julia packages are installed and then run:
 ```julia
@@ -61,6 +61,20 @@ The settings data structures allows for easy specification on training settings:
 	output_dir = "output" # Folder to save outputs to
 	n_disc = 1 # Number of discriminator training steps between generator training step
 end
+```
+
+## gan evaluation
+The file `gan_evaluation.jl` contains code for calculating recall for various k values and sample sizes. To calculate the recall for a generator network, run:
+
+```julia
+g256x4msle = BSON.load("../gan_training/generators/mlp256x4_msle_generator_uniform.bson")[:g];
+
+fn = "../../data/SK_DownsampledGANFocusAreaData.h5"
+images = h5read(fn, "y_train")
+real_images = reshape(images, 16*8, :)
+y = h5read(fn, "X_train")[1:2, :];
+
+recalls256x4msle = vary_sample_size(g256x4msle, sizes, real_images; k = 30);
 ```
 
 ## xplane interface
@@ -105,5 +119,7 @@ ubs = [30.0, 11.0] # Upper bounds of region of start states
 label_start_states!(tree, lbs, ubs);
 trees = forward_reach(tree)
 ```
+
+Larger networks may require approximate verification techniques to run in finite time. To use an approximate approach instead of including the `verify.jl` file include the `approximate.jl` file.
 
 The `viz/` folder contains code for plotting the results.

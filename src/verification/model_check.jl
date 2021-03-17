@@ -90,11 +90,13 @@ function forward_reach(init_tree::KDTREE; max_iter = 50, verbose = false)
             curr_ubs = pop!(ub_s)
 
             if typeof(curr) == LEAFNODE
-                next_lbs, next_ubs = reachable_cell(curr_lbs, curr_ubs, curr.min_control, curr.max_control)
-                curr_nodes = get_overlapping_nodes(tree.root_node, next_lbs, next_ubs)
-                next_nodes = get_overlapping_nodes(next_tree.root_node, next_lbs, next_ubs)
-                for node in next_nodes
-                    node.prob = curr.prob
+                if curr.prob == 1
+                    next_lbs, next_ubs = reachable_cell(curr_lbs, curr_ubs, curr.min_control, curr.max_control)
+                    #curr_nodes = get_overlapping_nodes(tree.root_node, next_lbs, next_ubs)
+                    next_nodes = get_overlapping_nodes(next_tree.root_node, next_lbs, next_ubs)
+                    for node in next_nodes
+                        node.prob = curr.prob
+                    end
                 end
              else
                 # Traverse tree and keep track of bounds

@@ -1,9 +1,9 @@
 include("verify.jl")
 
-network = read_nnet("../../models/full_big_normal_v2.nnet")
+network = read_nnet("../../models/full_big_uniform.nnet")
 
 num_inp = size(network.layers[1].weights, 2)
-strategy = MIPVerify.mip
+strategy = MIPVerify.interval_arithmetic
 timeout_per_node = 0.5
 main_timeout = 10.0
 mipverify_network = network_to_mipverify_network(network, "test", strategy)
@@ -32,13 +32,32 @@ function get_control_optima(mipverify_network, num_inp, lbs, ubs, main_solver, t
     return min_control, max_control
 end
 
-min_cte = -0.1
-max_cte = 0.1
+function get_control_optima(n_splits, mipverify_network, num_inp, lbs, ubs, main_solver, tightening_solver)
+    # NOTE: hard-coded for two latent variables
+    splits = collect(range(lbs[1], stop = ubs[1], length = n_splits + 1))
+    min_so_far = Inf
+    max_so_far = -Inf
 
-min_he = -0.1
-max_he = 0.1
+    for i = 1:n_splits
+        for j = 1:n_splits
+            curr_lbs = [splits[i]; splits[j]; lbs[3:4]]
+            curr_ubs = [splits[i + 1]; splits[j + 1]; ubs[3:4]]
+            min_c, max_c = get_control_optima(mipverify_network, num_inp, curr_lbs, curr_ubs, main_solver, tightening_solver)
+            
+            min_c < min_so_far && (min_so_far = min_c)
+            max_c > max_so_far && (max_so_far = max_c)
+        end
+    end
+    return min_so_far, max_so_far
+end
+
+min_cte = -3.2
+max_cte = -3.0
+
+min_he = -0.5
+max_he = 0.0
 
 lbs = [-1.0, -1.0, min_cte / 6.366468343804353, min_he / 17.248858791583547]
 ubs = [1.0, 1.0, max_cte / 6.366468343804353, max_he / 17.248858791583547]
 
-#min_control, max_control = get_control_optima(mipverify_network, num_inp, lbs, ubs, main_solver, tightening_solver)
+@time min_control, max_control = get_control_optima(8, mipverify_network, num_inp, lbs, ubs, main_solver, tightening_solver)
