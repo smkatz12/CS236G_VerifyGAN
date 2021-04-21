@@ -1,9 +1,13 @@
 using DataStructures
+using LazySets
 
 mutable struct LEAFNODE
     min_control::Float64
     max_control::Float64
     prob::Float64
+    images::Array{Array{Float64, 2}} # list of images 
+    states::Array{Array{Float64, 1}} # list of states corresponding to each image
+    buffer::Hyperrectangle
 end
 
 mutable struct KDNODE
@@ -21,8 +25,8 @@ mutable struct KDTREE
     root_node::KDNODE
 end
 
-function leafnode(;min_control = -10.0, max_control = 10.0, prob = 0.0)
-    return LEAFNODE(min_control, max_control, prob)
+function leafnode(;min_control = -10.0, max_control = 10.0, prob = 0.0, images=[], states=[], buffer=Hyperrectangle([0], [1]))
+    return LEAFNODE(min_control, max_control, prob, images, states, buffer)
 end
 
 function kdnode(;dim = 1, split = 0.0, left = leafnode(), right = leafnode(), 
@@ -39,6 +43,29 @@ function get_leaf(root_node, point)
     end
     return curr_node
 end
+
+get_leaf(tree::KDTREE, point) = get_leaf(tree.root_node, point)
+
+get_buffer(tree, state) = get_leaf(tree, state).buffer
+
+
+function get_leaves(root_node::Union{KDNODE, LEAFNODE})
+    leaves = []
+    nodes = []
+    push!(nodes, root_node)
+    while length(nodes) != 0
+        curr_node = pop!(nodes)
+        if typeof(curr_node) == LEAFNODE 
+            push!(leaves, curr_node)
+        else
+            push!(nodes, curr_node.left, curr_node.right)
+        end
+    end
+    return leaves
+end
+
+get_leaves(tree::KDTREE) = get_leaves(tree.root_node)
+
 
 function get_bounds(tree)
     lbs = []
