@@ -43,15 +43,16 @@ function train(fn; kws...)
     # Load Data
     images = h5read(fn, "y_train") # yes I know the labels seem backwards
     images = reshape(images, 128, :)
-    y = h5read(fn, "X_train")[1:2, :]
-        println("std1: ", std(y[1,:]), " std2: ", std(y[2,:]))
-    y[1,:] ./= std(y[1,:])
-    y[2,:] ./= std(y[2,:])
+    y = h5read(fn, "X_train")#[1:2, :]
+    println("std1: ", std(y[1, 1:1200]), " std2: ", std(y[2, 1:1200]))
+    y[1,:] ./= 10.0 #std(y[1,:])
+    y[2,:] ./= 30.0 #std(y[2,:])
+    y[3,:] = (y[3, :] .- 322f0) ./ 30f0
 
     train_data = DataLoader(y, images, batchsize=args.batchsize, shuffle = true)
 
     # Construct model and loss
-    layer_sizes = (2, 256, 256, 256, 256, 128)
+    layer_sizes = (3, 256, 256, 256, 256, 128)
     m = build_model(layer_sizes, relu)
     loss(x,y) = mse(m(x), y)
 
