@@ -1,5 +1,12 @@
 using Colors
 using Plots
+using NeuralVerification
+using NeuralVerification: Layer, Id, write_nnet, compute_output
+
+(network::Network)(input::Array{Float32, 1}) = compute_output(network, input)
+(network::Network)(input::Array{Float32, 2}) = mapslices(network, input; dims=1)
+
+include(string(@__DIR__, "/../gan_evaluation/approx_radius.jl"))
 
 """
     add_images_to_tree(tree, images, states)
@@ -27,36 +34,25 @@ function add_image_to_tree(tree, image, state)
 end
 
 
-function get_closest_generated_image(gan, image, state)
-    state_normalized = state ./ [6.366468343804353, 17.248858791583547] 
-    lbs = [-1.0, -1.0, state_normalized...]
-    ubs = [1.0, 1.0, state_normalized...]
-    vec_image = vec(image)
-    x, lower, upper, steps = inclusion_wrapper(gan, lbs, ubs, vec_image, 2; n_steps = 2, stop_gap=0.05)
-    println("Interval: ", (lower, upper))
-    println(x)
-    return NeuralVerification.compute_output(gan, x)
-end
+# function get_closest_generated_image(gan, image, state; latent_bound=0.8)
+#     state_normalized = state ./ [6.366468343804353, 17.248858791583547] 
+#     lbs = [-latent_bound, -latent_bound, state_normalized...]
+#     ubs = [latent_bound, latent_bound, state_normalized...]
+#     vec_image = vec(image)
+#     x, lower, upper, steps = inclusion_wrapper(gan, lbs, ubs, vec_image, 2; n_steps = 2, stop_gap=0.05)
+#     println("Interval: ", (lower, upper))
+#     println(x)
+#     return NeuralVerification.compute_output(gan, x)
+# end
 
-function sample_closest_generated_image(gan, image, state; n_samples=100)
+function sample_closest_generated_image(gan, image, state; num_samples=300, latent_bound=0.8)
     state_normalized = state ./ [6.366468343804353, 17.248858791583547] 
-    lbs = [-1.0, -1.0, state_normalized...]
-    ubs = [1.0, 1.0, state_normalized...]
+    lbs = [-latent_bound, -latent_bound, (state_normalized .- 1e-5)...]
+    ubs = [latent_bound, latent_bound, (state_normalized .+ 1e-5)...]
     vec_image = vec(image)
-    hyperrectangle = Hyperrectangle(low=lbs, high=ubs)
-    samples = sample(hyperrectangle, n_samples)
+    x, best_dist = get_approximate_minimum_radius(gan, lbs, ubs, vec_image; num_samples = num_samples, p = 2)
 
-    best_so_far = Inf
-    best_output_so_far = []
-    for sample in samples
-        output = NeuralVerification.compute_output(gan, sample)
-        curr_dist = norm(output .- vec(image), 2)
-        if curr_dist < best_so_far
-            best_so_far = curr_dist 
-            best_output_so_far = output
-        end
-    end
-    return best_output_so_far
+    return compute_output(gan, x)
 end
 
 function get_image_gaps_for_leaf(gan, leaf)
@@ -77,13 +73,24 @@ function get_image_gaps_for_leaf(gan, leaf)
 end
 
 function image_gaps_to_buffer(image_gaps)
-    lbs = Inf*ones(size(image_gaps[1]))
-    ubs = -Inf*ones(size(image_gaps[1]))
+    # Grow hyperrectangle that will include the original point 
+    # until it touches all points 
+    highest = zeros(size(image_gaps[1]))
+    lowest = zeros(size(image_gaps[1]))
     for gap in image_gaps 
-        lbs = min.(lbs, gap)
-        ubs = max.(ubs, gap)
+        highest = max.(highest, gap)
+        lowest = min.(lowest, gap)
     end
-    return Hyperrectangle(low=vec(lbs), high=vec(ubs))
+    center = (highest .+ lowest) ./ 2.0
+    radius = (highest .- lowest) ./ 2.0
+    return Hyperrectangle(vec(center), vec(radius))
+
+    # Expand hyperrectangle centered on generated point until contains all 
+    # radii = zeros(size(image_gaps[1]))
+    # for gap in image_gaps 
+    #     radii = max.(radii, abs.(gap))
+    # end
+    # return Hyperrectangle(zeros(length(image_gaps[1])), vec(radii))
 end
 
 function add_buffer_to_leaf(gan, leaf)
@@ -114,3 +121,33 @@ function plot_images_from_tree(output_file_base, tree, state)
         savefig(output_file_base*string(i)*".png")
     end
 end
+
+function plot_image_and_closest_gen(gan, image, state)
+    close_image = reshape(sample_closest_generated_image(gan, image, state), 16, 8)
+    plot_original = plot(Gray.(image'), title="Original")
+    plot_close = plot(Gray.(close_image'), title="Generated")
+    plot(plot_original, plot_close, layout=(1, 2))
+end
+
+# Rescale from -1 --> 1 to 0 --> 1
+# So we want Ax + b for that last layer instead of mapping -1 --> 1 to be 0 --> 1
+# We want (Ax + b + 1)/2. So we should update A to A/2 and b to (b+1)/2
+function rescale_gan_output(output_file, gan)
+    layers = gan.layers
+    new_layers = Layer[layers[i] for i = 1:length(layers)-1]
+    push!(new_layers, Layer(layers[end].weights ./ 2.0, (layers[end].bias .+ 1) ./ 2.0, Id()))
+    new_network = Network(new_layers)
+    write_nnet(output_file, new_network)
+end
+
+
+# Code to test gap calculation 
+# points = [randn(2) .+ 2.0 for i = 1:10]
+# Plots.scatter([point[1] for point in points], [point[2] for point in points], label="gaps")
+# rect = image_gaps_to_buffer(points)
+# plot!(rect, label="buffer")
+
+# Code to check close images
+# images_for_leafs = [get_leaf(tree, state).images for state in eachcol(states)]
+# index = 1
+# plot_image_and_closest_gen(gan_network, images_for_leafs[index][1], states[1:2, index])

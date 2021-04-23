@@ -48,18 +48,18 @@ end
 
 #g = BSON.load("../gan_training/generators/mlp256x4_msle_generator_uniform.bson")[:g]
 #g = BSON.load("../gan_training/generators/mlp256x4_best_conv.bson")[:g]
-g = BSON.load("../gan_training/generators/bigmlp_generator_uniform.bson")[:g]
+#g = BSON.load("../gan_training/generators/bigmlp_generator_uniform.bson")[:g]
 
 # fn = "../../data/SK_DownsampledGANFocusAreaData.h5"
 # images = h5read(fn, "y_train")
 # images = reshape(images, 16*8, :)
 # y = h5read(fn, "X_train")[1:2, :]
 
-fn = "/scratch/smkatz/NASA_ULI/controller_detailed_run_v2.h5"
-xs = h5read(fn, "xs")
-thetas = h5read(fn, "thetas")
-y = vcat(xs', thetas')
-images = h5read(fn, "downsampled_images")
+# fn = "/scratch/smkatz/NASA_ULI/controller_detailed_run_v2.h5"
+# xs = h5read(fn, "xs")
+# thetas = h5read(fn, "thetas")
+# y = vcat(xs', thetas')
+# images = h5read(fn, "downsampled_images")
 
 # i = 1
 
@@ -72,4 +72,4 @@ images = h5read(fn, "downsampled_images")
 
 # x, rad = get_approximate_minimum_radius(g, lbs, ubs, (images[:, i] .* 2) .- 1)
 
-@time xs, overs = get_approximate_minimum_radii(g, images, y, p = 2, latent_bound = 0.8)
+#@time xs, overs = get_approximate_minimum_radii(g, images, y, p = 2, latent_bound = 0.8)

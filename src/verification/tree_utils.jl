@@ -6,6 +6,7 @@ mutable struct LEAFNODE
     max_control::Float64
     prob::Float64
     images::Array{Array{Float64, 2}} # list of images 
+    #closest_images::Array{Array{Float64, 2}} # list of closest generated images
     states::Array{Array{Float64, 1}} # list of states corresponding to each image
     buffer::Hyperrectangle
 end
@@ -25,7 +26,7 @@ mutable struct KDTREE
     root_node::KDNODE
 end
 
-function leafnode(;min_control = -10.0, max_control = 10.0, prob = 0.0, images=[], states=[], buffer=Hyperrectangle([0], [1]))
+function leafnode(;min_control = -Inf, max_control = Inf, prob = 0.0, images=[], states=[], buffer=Hyperrectangle([0], [1]))
     return LEAFNODE(min_control, max_control, prob, images, states, buffer)
 end
 
