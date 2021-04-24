@@ -291,23 +291,27 @@ function verify_tree_buffered!(tree, gan_network, control_network, full_network;
         curr_ubs = pop!(ub_s)
 
         if typeof(curr) == LEAFNODE
-            # TODO: add if statement if no images don't use the harder verification 
-            verify_lbs = [-latent_bound; -latent_bound; curr_lbs ./ [6.366468343804353, 17.248858791583547]]
-            verify_ubs = [latent_bound; latent_bound; curr_ubs ./ [6.366468343804353, 17.248858791583547]]
-            
-            #min_control_linear, max_control_linear = ai2zPQ_bounds(network, verify_lbs, verify_ubs, coeffs)
-            
-            println("------Currently doing cell with ", length(curr.images), " images------")
-            if length(curr.images) == 0
-                min_control, max_control = ai2zPQ_bounds(full_network, verify_lbs, verify_ubs, coeffs; n_steps=10000, stop_gap=1e-1, verbosity=0)
+            if curr.min_control != -Inf || curr.max_control != Inf
+                @warn "Skipping leafs because they already have a min or max control"
             else
-                min_control, max_control = ai2zPQ_bounds_buffered_breakdown(gan_network, control_network, verify_lbs, verify_ubs, coeffs, curr.buffer; n_steps=10000, stop_gap=1e-1, verbosity=0)
-            end
-            println("buffer: ", [min_control, max_control])
+                # TODO: add if statement if no images don't use the harder verification 
+                verify_lbs = [-latent_bound; -latent_bound; curr_lbs ./ [6.366468343804353, 17.248858791583547]]
+                verify_ubs = [latent_bound; latent_bound; curr_ubs ./ [6.366468343804353, 17.248858791583547]]
+                
+                #min_control_linear, max_control_linear = ai2zPQ_bounds(network, verify_lbs, verify_ubs, coeffs)
 
-            curr.min_control = min_control
-            curr.max_control = max_control
 
+                println("------Currently doing cell with ", length(curr.images), " images------")
+                if length(curr.images) == 0
+                    @time min_control, max_control = ai2zPQ_bounds(full_network, verify_lbs, verify_ubs, coeffs; n_steps=10000, stop_gap=1e-1, verbosity=0)
+                else
+                    @time min_control, max_control = ai2zPQ_bounds_buffered_breakdown(gan_network, control_network, verify_lbs, verify_ubs, coeffs, curr.buffer; n_steps=10000, stop_gap=1e-1, verbosity=0)
+                end
+                println("buffer: ", [min_control, max_control])
+
+                curr.min_control = min_control
+                curr.max_control = max_control
+            end 
             leafs_finished = leafs_finished + 1
             percent_done = leafs_finished/total_leaves
             println("Leafs finished: ", leafs_finished, "   ", round(100*percent_done, digits=2), "% done")
