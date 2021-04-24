@@ -1,6 +1,7 @@
 using HDF5
 using NeuralVerification
 using NeuralVerification: compute_output
+using BSON: @save, @load
 
 include("./src/verification/tree_utils.jl")
 include("./src/verification/approximate.jl")
@@ -32,6 +33,8 @@ ubs = [11.0, 30.0]
 #add_images_to_tree(tree, images, states[1:2, :])
 #add_buffers_to_tree(gan_network, tree)
 
+#@save "./tree_1000samples_preverification.bson" tree
+@load "./src/verification/verified_trees/tree_1000samples_preverification.bson" tree
 # For the given state visualize the buffer and images, and then find the max / min control 
 # with and without the buffer
 state = [0.0, 0.0]
@@ -54,6 +57,8 @@ state = [0.0, 0.0]
 #verify_tree_buffered!(tree, gan_network, control_network, full_network)
 
 verify_tree_buffered_parallel!(tree, gan_network, control_network, full_network)
+
+@save "./src/verification/verified_trees/buffer_breakdown_1000samples.bson" tree
 
 ### Test running a linear optimization with a zonotope input
 # input_set = rand(Zonotope, dim=4)
