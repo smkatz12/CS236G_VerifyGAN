@@ -45,7 +45,7 @@ end
 #     return NeuralVerification.compute_output(gan, x)
 # end
 
-function sample_closest_generated_image(gan, image, state; num_samples=100, latent_bound=0.8)
+function sample_closest_generated_image(gan, image, state; num_samples=1000, latent_bound=0.8)
     state_normalized = state ./ [6.366468343804353, 17.248858791583547] 
     lbs = [-latent_bound, -latent_bound, (state_normalized .- 1e-5)...]
     ubs = [latent_bound, latent_bound, (state_normalized .+ 1e-5)...]
@@ -98,7 +98,7 @@ function add_buffer_to_leaf(gan, leaf)
 end
 
 function add_buffers_to_tree(gan, tree)
-    for (i, leaf) in enumerate(get_leaves(tree))
+    Threads.@threads for (i, leaf) in collect(enumerate(get_leaves(tree)))
         add_buffer_to_leaf(gan, leaf)
         println("Added leaf ", i)
     end
@@ -117,6 +117,7 @@ function plot_images_from_tree(output_file_base, tree, state)
     leaf = get_leaf(tree, state)
     images = leaf.images 
     for (i, image) in enumerate(images)
+        println(Threads.threadid())
         plot(Gray.(image'))
         savefig(output_file_base*string(i)*".png")
     end

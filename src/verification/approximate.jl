@@ -129,7 +129,7 @@ function mip_linear_opt(network, input_set::Union{Hyperrectangle, Zonotope}, coe
     bounds = NeuralVerification.get_bounds(Ai2z(), network, input_set; before_act=true)
 
     # Create your model
-    model = Model(with_optimizer(() -> Gurobi.Optimizer(GRB_ENV), OutputFlag=0, Threads=8, TimeLimit=10.0))
+    model = Model(with_optimizer(() -> Gurobi.Optimizer(GRB_ENV), OutputFlag=0, Threads=1, TimeLimit=10.0))
     z = init_vars(model, network, :z, with_input=true)
     δ = init_vars(model, network, :δ, binary=true)
     # get the pre-activation bounds:

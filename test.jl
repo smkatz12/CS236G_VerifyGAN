@@ -35,13 +35,13 @@ ubs = [11.0, 30.0]
 # For the given state visualize the buffer and images, and then find the max / min control 
 # with and without the buffer
 state = [0.0, 0.0]
-visualize_buffer("./plots/buffer", tree, state)
-plot_images_from_tree("./plots/images", tree, state)
+# visualize_buffer("./plots/buffer", tree, state)
+# plot_images_from_tree("./plots/images", tree, state)
 
-buffer = get_buffer(tree, state)
+# buffer = get_buffer(tree, state)
 
-lb_verify = [-0.8, -0.8, (state ./ [6.366468343804353, 17.248858791583547])...]
-ub_verify = [0.8, 0.8, (state ./ [6.366468343804353, 17.248858791583547])...]
+# lb_verify = [-0.8, -0.8, (state ./ [6.366468343804353, 17.248858791583547])...]
+# ub_verify = [0.8, 0.8, (state ./ [6.366468343804353, 17.248858791583547])...]
 # @time min_val_buffer, max_val_buffer = ai2zPQ_bounds_buffered(gan_network, control_network, lb_verify, ub_verify, coeffs, buffer; n_steps=1000)
 # @time min_val_linear, max_val_linear = max_min_linear(full_network, lb_verify, ub_verify, coeffs; n_steps=1000)
 # @time min_val_buffer_breakdown, max_val_buffer_breakdown = ai2zPQ_bounds_buffered_breakdown(gan_network, control_network, lb_verify, ub_verify, coeffs, buffer; n_steps=1000, stop_freq = 50, stop_gap=1e-1, initial_splits=0)
@@ -51,9 +51,9 @@ ub_verify = [0.8, 0.8, (state ./ [6.366468343804353, 17.248858791583547])...]
 # println("Min, max with buffer: ", [min_val_buffer, max_val_buffer])
 # println("Min, max with buffer breakdown: ", [min_val_buffer_breakdown, max_val_buffer_breakdown])
 
-verify_tree_buffered!(tree, gan_network, control_network, full_network)
+#verify_tree_buffered!(tree, gan_network, control_network, full_network)
 
-#verify_tree_buffered_parallel!(tree, gan_network, control_network, full_network)
+verify_tree_buffered_parallel!(tree, gan_network, control_network, full_network)
 
 ### Test running a linear optimization with a zonotope input
 # input_set = rand(Zonotope, dim=4)
