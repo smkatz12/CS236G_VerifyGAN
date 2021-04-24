@@ -65,6 +65,58 @@ function get_leaves(root_node::Union{KDNODE, LEAFNODE})
     return leaves
 end
 
+function get_leaves_and_bounds(tree, latent_bound)
+    # Stacks to go through tree
+    leaves = LEAFNODE[]
+    leaf_lbs = Array{Float64, 1}[]
+    leaf_ubs = Array{Float64, 1}[]
+
+    lb_s = Stack{Vector{Float64}}()
+    ub_s = Stack{Vector{Float64}}()
+    s = Stack{Union{LEAFNODE, KDNODE}}()
+
+    push!(lb_s, tree.lbs)
+    push!(ub_s, tree.ubs)
+    push!(s, tree.root_node)
+
+    while !(isempty(s))
+        println(length(s))
+        curr = pop!(s)
+        curr_lbs = pop!(lb_s)
+        curr_ubs = pop!(ub_s)
+
+        if typeof(curr) == LEAFNODE
+            curr_lbs = [-latent_bound; -latent_bound; curr_lbs]
+            curr_ubs = [latent_bound; latent_bound; curr_ubs]
+            
+            push!(leaves, curr)
+            push!(leaf_lbs, curr_lbs)
+            push!(leaf_ubs, curr_ubs)
+        else
+            # Traverse tree and keep track of bounds
+            dim = curr.dim
+            split = curr.split
+            # Go left, upper bounds will change
+            left_ubs = copy(curr_ubs)
+            left_ubs[dim] = split
+
+            push!(lb_s, curr_lbs)
+            push!(ub_s, left_ubs)
+            push!(s, curr.left)
+
+            # Go right, lower bounds will change
+            right_lbs = copy(curr_lbs)
+            right_lbs[dim] = split
+            
+            push!(lb_s, right_lbs)
+            push!(ub_s, curr_ubs)
+            push!(s, curr.right)
+        end
+    end
+    return leaves, leaf_lbs, leaf_ubs
+end
+
+
 get_leaves(tree::KDTREE) = get_leaves(tree.root_node)
 
 

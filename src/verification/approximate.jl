@@ -6,6 +6,7 @@ using DataStructures
 using LinearAlgebra
 using Gurobi
 using Dates
+using Distributed
 const GRB_ENV = Gurobi.Env()
 
 include("ai2zPQ.jl")
@@ -18,7 +19,6 @@ control_network = read_nnet("models/KJ_TaxiNet.nnet")
 const TOL = Ref(sqrt(eps()))
 
 """ Discretized Ai2z"""
-
 function discretized_ai2z_bounds(network, lbs, ubs, coeffs; n_per_latent = 10, n_per_state = 1)
     # Ai2z overapproximation through discretization 
     ai2z = Ai2z()
@@ -75,7 +75,6 @@ function get_bounds(lbs, ubs, n_per_latent, n_per_state)
 end
 
 """ ai2zPQ functions """
-
 function ai2zPQ_bounds(network, lbs, ubs, coeffs)
     # Define functions
     evaluate_objective_max(network, x) = dot(coeffs, compute_output(network, x))
@@ -268,8 +267,72 @@ function verify_tree!(tree, network; get_control_bounds = ai2zPQ_bounds, coeffs 
     end
 end
 
-function verify_tree_buffered!(tree, gan_network, control_network, full_network; coeffs = [-0.74, -0.44], 
-     latent_bound = 0.8)
+function verify_tree_buffered_parallel!(tree, gan_network, control_network, full_network; coeffs = [-0.74, -0.44], latent_bound = 0.8)
+    leaves, lbs, ubs = get_leaves_and_bounds(tree, latent_bound)
+
+    # Compute the appropriate controls 
+    # Introduce some variables to track progress
+    leafs_finished = 0
+    total_leaves = length(get_leaves(tree))
+    start_time = now()    
+    
+    lk = ReentrantLock()
+    println("Start of mapping function")
+    Threads.@threads for (leaf, lb, ub) in collect(zip(leaves, lbs, ubs))
+        println("thread id: ", Threads.threadid())
+    
+        verify_lbs = [lb[1], lb[2], (lb[3:4] ./ [6.366468343804353, 17.248858791583547])...]
+        verify_ubs = [ub[1], ub[2], (ub[3:4] ./ [6.366468343804353, 17.248858791583547])...]
+        println("----Starting query with ", length(leaf.images), " images----")
+        if length(leaf.images) == 0
+            @time min_control, max_control = ai2zPQ_bounds(full_network, verify_lbs, verify_ubs, coeffs; n_steps=10000, stop_gap=1e-1, verbosity=0)
+        else
+            @time min_control, max_control = ai2zPQ_bounds_buffered_breakdown(gan_network, control_network, verify_lbs, verify_ubs, coeffs, leaf.buffer; n_steps=10000, stop_gap=1e-1, verbosity=0)
+        end
+
+        # Track progress
+        lock(lk) do
+            leafs_finished = leafs_finished + 1
+            percent_done = leafs_finished/total_leaves
+            println("Leafs finished: ", leafs_finished, "   ", round(100*percent_done, digits=2), "% done")
+            println("ETA: ", (1.0/percent_done - 1.0)*(Dates.value(now() - start_time)) / 1000 / 3600, " hours")
+        end 
+        leaf.min_control = min_control 
+        leaf.max_control = max_control 
+    end
+    # leaf_to_controls = 
+    # (leaf::LEAFNODE, lb::Array{Float64, 1}, ub::Array{Float64, 1}) ->
+    # begin
+    #     println("Start of mapping function")
+    #     verify_lbs = [lb[1], lb[2], (lb[3:4] ./ [6.366468343804353, 17.248858791583547])...]
+    #     verify_ubs = [ub[1], ub[2], (ub[3:4] ./ [6.366468343804353, 17.248858791583547])...]
+    #     if length(leaf.images) == 0
+    #         @time min_control, max_control = ai2zPQ_bounds(full_network, verify_lbs, verify_ubs, coeffs; n_steps=10000, stop_gap=1e-1, verbosity=0)
+    #     else
+    #         @time min_control, max_control = ai2zPQ_bounds_buffered_breakdown(gan_network, control_network, verify_lbs, verify_ubs, coeffs, leaf.buffer; n_steps=10000, stop_gap=1e-1, verbosity=0)
+    #     end
+
+    #     # Track progress
+    #     leafs_finished = leafs_finished + 1
+    #     percent_done = leafs_finished/total_leaves
+    #     println("Leafs finished: ", leafs_finished, "   ", round(100*percent_done, digits=2), "% done")
+    #     println("ETA: ", (1.0/percent_done - 1.0)*(Dates.value(now() - start_time)) / 1000 / 3600, " hours")
+
+    #     return min_control, max_control
+    # end
+
+    # # Map each leaf to its lower and upper bound on its controls 
+    # println("Starting parallel map")
+    # controls = pmap(leaf_to_controls, leaves, lbs, ubs)
+
+    # # Update the leaves with their appropriate controls 
+    # for (i, leaf) in enumerate(leaves)
+    #     leaf.min_control = controls[i][1]
+    #     leaf.max_control = controls[i][2]
+    # end
+end
+
+function verify_tree_buffered!(tree, gan_network, control_network, full_network; coeffs = [-0.74, -0.44], latent_bound = 0.8)
     # Stacks to go through tree
     lb_s = Stack{Vector{Float64}}()
     ub_s = Stack{Vector{Float64}}()
@@ -291,7 +354,7 @@ function verify_tree_buffered!(tree, gan_network, control_network, full_network;
         curr_ubs = pop!(ub_s)
 
         if typeof(curr) == LEAFNODE
-            if curr.min_control != -Inf || curr.max_control != Inf
+            if false && (curr.min_control != -Inf || curr.max_control != Inf)
                 @warn "Skipping leafs because they already have a min or max control"
             else
                 # TODO: add if statement if no images don't use the harder verification 

@@ -38,13 +38,13 @@ state = [0.0, 0.0]
 visualize_buffer("./plots/buffer", tree, state)
 plot_images_from_tree("./plots/images", tree, state)
 
-lbs = [-0.8, -0.8, (state ./ [6.366468343804353, 17.248858791583547])...]
-ubs = [0.8, 0.8, (state ./ [6.366468343804353, 17.248858791583547])...]
 buffer = get_buffer(tree, state)
 
-# @time min_val_buffer, max_val_buffer = ai2zPQ_bounds_buffered(gan_network, control_network, lbs, ubs, coeffs, buffer; n_steps=1000)
-# @time min_val_linear, max_val_linear = max_min_linear(full_network, lbs, ubs, coeffs; n_steps=1000)
-# @time min_val_buffer_breakdown, max_val_buffer_breakdown = ai2zPQ_bounds_buffered_breakdown(gan_network, control_network, lbs, ubs, coeffs, buffer; n_steps=1000, stop_freq = 50, stop_gap=1e-1, initial_splits=0)
+lb_verify = [-0.8, -0.8, (state ./ [6.366468343804353, 17.248858791583547])...]
+ub_verify = [0.8, 0.8, (state ./ [6.366468343804353, 17.248858791583547])...]
+# @time min_val_buffer, max_val_buffer = ai2zPQ_bounds_buffered(gan_network, control_network, lb_verify, ub_verify, coeffs, buffer; n_steps=1000)
+# @time min_val_linear, max_val_linear = max_min_linear(full_network, lb_verify, ub_verify, coeffs; n_steps=1000)
+# @time min_val_buffer_breakdown, max_val_buffer_breakdown = ai2zPQ_bounds_buffered_breakdown(gan_network, control_network, lb_verify, ub_verify, coeffs, buffer; n_steps=1000, stop_freq = 50, stop_gap=1e-1, initial_splits=0)
 
 
 # println("Min, max with linear: ", [min_val_linear, max_val_linear])
@@ -53,6 +53,7 @@ buffer = get_buffer(tree, state)
 
 verify_tree_buffered!(tree, gan_network, control_network, full_network)
 
+#verify_tree_buffered_parallel!(tree, gan_network, control_network, full_network)
 
 ### Test running a linear optimization with a zonotope input
 # input_set = rand(Zonotope, dim=4)
@@ -101,3 +102,8 @@ verify_tree_buffered!(tree, gan_network, control_network, full_network)
 
 
 #image_lengths = [length(leaf.images) for leaf in get_leaves(tree)]
+
+# Parallelization play 
+# ntails = @parallel (+) for i = 1:1000
+#     rand(Bool)
+# end

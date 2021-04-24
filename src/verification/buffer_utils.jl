@@ -45,7 +45,7 @@ end
 #     return NeuralVerification.compute_output(gan, x)
 # end
 
-function sample_closest_generated_image(gan, image, state; num_samples=1000, latent_bound=0.8)
+function sample_closest_generated_image(gan, image, state; num_samples=100, latent_bound=0.8)
     state_normalized = state ./ [6.366468343804353, 17.248858791583547] 
     lbs = [-latent_bound, -latent_bound, (state_normalized .- 1e-5)...]
     ubs = [latent_bound, latent_bound, (state_normalized .+ 1e-5)...]
