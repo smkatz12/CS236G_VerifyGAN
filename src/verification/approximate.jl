@@ -124,6 +124,34 @@ begin
     @constraint(m, z .== c .+ G * x)
 end
 
+
+function mip_linear_opt_value_only(network, input_set::Union{Hyperrectangle, Zonotope}, coeffs)
+    # Get your bounds
+    bounds = NeuralVerification.get_bounds(Ai2z(), network, input_set; before_act=true)
+
+    # Create your model
+    model = Model(with_optimizer(() -> Gurobi.Optimizer(GRB_ENV), OutputFlag=0, Threads=1, TimeLimit=10.0))
+    z = init_vars(model, network, :z, with_input=true)
+    δ = init_vars(model, network, :δ, binary=true)
+    # get the pre-activation bounds:
+    model[:bounds] = bounds
+    model[:before_act] = true
+
+    # Add the input constraint 
+    NeuralVerification.add_set_constraint!(model, input_set, first(z))
+
+    # Encode the network as an MIP
+    encode_network!(model, network, BoundedMixedIntegerLP())
+    @objective(model, Max, coeffs'*last(z))
+
+    optimize!(model)
+    if termination_status(model) == OPTIMAL
+        return objective_value(model)
+    else 
+        @assert false "Non optimal result"
+    end
+end
+
 function mip_linear_opt(network, input_set::Union{Hyperrectangle, Zonotope}, coeffs)
     # Get your bounds
     bounds = NeuralVerification.get_bounds(Ai2z(), network, input_set; before_act=true)
@@ -184,14 +212,14 @@ function linear_opt_with_buffer_breakdown(network_one, network_two, lbs, ubs, co
     evaluate_objective = x -> begin
                                     out_1 = compute_output(network_one, x)
                                     buffered_output = translate(buffer, out_1)
-                                    opt_input, opt_val = mip_linear_opt(network_two, buffered_output, coeffs)
+                                    opt_val = mip_linear_opt_value_only(network_two, buffered_output, coeffs)
                                     return opt_val
                               end
     approximate_optimize_cell = cell -> begin
                                                 reach_one = forward_network(solver, network_one, cell)
                                                 buffered_reach = concretize(reach_one ⊕ buffer)
                                                 # trying with the mip solver 
-                                                opt_input, opt_val = mip_linear_opt(network_two, buffered_reach, coeffs)
+                                                opt_val = mip_linear_opt_value_only(network_two, buffered_reach, coeffs)
                                                 return opt_val
                                         end
     return general_priority_optimization(Hyperrectangle(low=lbs, high=ubs), approximate_optimize_cell, evaluate_objective;  n_steps = n_steps, solver=solver, early_stop=early_stop, stop_freq=stop_freq, stop_gap=stop_gap, initial_splits=initial_splits, verbosity=verbosity)
@@ -269,6 +297,12 @@ end
 
 function verify_tree_buffered_parallel!(tree, gan_network, control_network, full_network; coeffs = [-0.74, -0.44], latent_bound = 0.8)
     leaves, lbs, ubs = get_leaves_and_bounds(tree, latent_bound)
+    # TODO: Remove this, temporary for testing with just a few queries
+    n = 20
+    leaves = leaves[1:n]
+    lbs = lbs[1:n]
+    ubs = ubs[1:n]
+    println("leaf 1 min, max before: ", [leaves[1].min_control, leaves[1].max_control])
 
     # Compute the appropriate controls 
     # Introduce some variables to track progress
@@ -278,6 +312,7 @@ function verify_tree_buffered_parallel!(tree, gan_network, control_network, full
     
     lk = ReentrantLock()
     println("Start of mapping function")
+
     Threads.@threads for (leaf, lb, ub) in collect(zip(leaves, lbs, ubs))
         println("thread id: ", Threads.threadid())
     
@@ -296,10 +331,38 @@ function verify_tree_buffered_parallel!(tree, gan_network, control_network, full
             percent_done = leafs_finished/total_leaves
             println("Leafs finished: ", leafs_finished, "   ", round(100*percent_done, digits=2), "% done")
             println("ETA: ", (1.0/percent_done - 1.0)*(Dates.value(now() - start_time)) / 1000 / 3600, " hours")
+            
+            leaf.min_control = min_control 
+            leaf.max_control = max_control 
         end 
-        leaf.min_control = min_control 
-        leaf.max_control = max_control 
     end
+
+    # Threads.@threads for (leaf, lb, ub) in collect(zip(leaves, lbs, ubs))
+    #     println("thread id: ", Threads.threadid())
+    
+    #     verify_lbs = [lb[1], lb[2], (lb[3:4] ./ [6.366468343804353, 17.248858791583547])...]
+    #     verify_ubs = [ub[1], ub[2], (ub[3:4] ./ [6.366468343804353, 17.248858791583547])...]
+    #     println("----Starting query with ", length(leaf.images), " images----")
+    #     if length(leaf.images) == 0
+    #         @time min_control, max_control = ai2zPQ_bounds(full_network, verify_lbs, verify_ubs, coeffs; n_steps=10000, stop_gap=1e-1, verbosity=0)
+    #     else
+    #         @time min_control, max_control = ai2zPQ_bounds_buffered_breakdown(gan_network, control_network, verify_lbs, verify_ubs, coeffs, leaf.buffer; n_steps=10000, stop_gap=1e-1, verbosity=0)
+    #     end
+
+    #     # Track progress
+    #     lock(lk) do
+    #         leafs_finished = leafs_finished + 1
+    #         percent_done = leafs_finished/total_leaves
+    #         println("Leafs finished: ", leafs_finished, "   ", round(100*percent_done, digits=2), "% done")
+    #         println("ETA: ", (1.0/percent_done - 1.0)*(Dates.value(now() - start_time)) / 1000 / 3600, " hours")
+            
+    #         leaf.min_control = min_control 
+    #         leaf.max_control = max_control 
+    #     end 
+    # end
+
+    # println("leaf 1 min, max after: ", [leaves[1].min_control, leaves[1].max_control])
+
     # leaf_to_controls = 
     # (leaf::LEAFNODE, lb::Array{Float64, 1}, ub::Array{Float64, 1}) ->
     # begin

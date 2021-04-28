@@ -104,12 +104,12 @@ end
 
 function split_cell(cell::Hyperrectangle)
     lbs, ubs = low(cell), high(cell)
-    largest_dimension = argmax(ubs .- lbs)
+    largest_dimension = argmax(radius_hyperrectangle(cell))
     # have a vector [0, 0, ..., 1/2 largest gap at largest dimension, 0, 0, ..., 0]
     delta = elem_basis(largest_dimension, length(lbs)) * 0.5 * (ubs[largest_dimension] - lbs[largest_dimension])
     cell_one = Hyperrectangle(low=lbs, high=(ubs .- delta))
     cell_two = Hyperrectangle(low=(lbs .+ delta), high=ubs)
-    return [cell_one, cell_two]
+    return cell_one, cell_two
 end
 
 function split_cell(cell::Zonotope)
@@ -162,7 +162,7 @@ function general_priority_optimization(start_cell, approximate_optimize_cell, ev
 
         # If you've made the max objective cell tiny
         # break (otherwise we end up with zero radius cells)
-        if max(radius(cell) < TOL[])
+        if radius(cell) < TOL[]
             # Return a concrete value and the upper bound from the parent cell
             # that was just dequeued, as it must have higher value than all other cells
             # that were on the queue, and they constitute a tiling of the space

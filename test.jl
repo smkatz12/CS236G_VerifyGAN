@@ -58,7 +58,7 @@ state = [0.0, 0.0]
 
 verify_tree_buffered_parallel!(tree, gan_network, control_network, full_network)
 
-@save "./src/verification/verified_trees/buffer_breakdown_1000samples.bson" tree
+#@save "./src/verification/verified_trees/buffer_breakdown_1000samples.bson" tree
 
 ### Test running a linear optimization with a zonotope input
 # input_set = rand(Zonotope, dim=4)
