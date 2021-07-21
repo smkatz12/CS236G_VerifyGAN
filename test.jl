@@ -3,8 +3,11 @@ using NeuralVerification
 using NeuralVerification: compute_output
 using BSON: @save, @load
 
-include("./src/verification/tree_utils.jl")
-include("./src/verification/approximate.jl")
+@everywhere using Pkg 
+@everywhere Pkg.activate(".")
+
+@everywhere include("./src/verification/tree_utils.jl")
+@everywhere include("./src/verification/approximate.jl")
 include("./src/verification/buffer_utils.jl")
 
 # Load your networks
