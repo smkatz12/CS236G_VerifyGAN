@@ -18,62 +18,6 @@ control_network = read_nnet("models/KJ_TaxiNet.nnet")
 
 const TOL = Ref(sqrt(eps()))
 
-""" Discretized Ai2z"""
-function discretized_ai2z_bounds(network, lbs, ubs, coeffs; n_per_latent = 10, n_per_state = 1)
-    # Ai2z overapproximation through discretization 
-    ai2z = Ai2z()
-    overestimate = -Inf
-    underestimate = Inf
-
-    lbs_disc, ubs_disc = get_bounds(lbs, ubs, n_per_latent, n_per_state)
-
-    for (curr_lbs, curr_ubs) in zip(lbs_disc, ubs_disc)
-        # Construct the input set, then propagate forwards to a 
-        # zonotope over-approximation of the output set
-        input_set = Hyperrectangle(low=curr_lbs, high=curr_ubs)
-        reach = forward_network(ai2z, network, input_set)
-
-        # The support function ρ maximizes coeffs^T x for x in reach
-        curr_overestimate = ρ(coeffs, reach)
-        curr_overestimate ≥ overestimate ? overestimate = curr_overestimate : nothing
-        # Maximize the negative and take negative to get minimum
-        curr_underestimate = -ρ(-coeffs, reach)
-        curr_underestimate ≤ underestimate ? underestimate = curr_underestimate : nothing
-    end
-
-    return underestimate, overestimate
-end
-
-function get_bounds(lbs, ubs, n_per_latent, n_per_state)
-    lbs_disc = []
-    ubs_disc = []
-
-    for i = 1:n_per_latent
-        for j = 1:n_per_latent
-            for k = 1:n_per_state
-                for l = 1:n_per_state
-                    # Find the upper and lower bounds of your region 
-                    lb1 = lbs[1] + (i-1)/n_per_latent * (ubs[1] - lbs[1])
-                    lb2 = lbs[2] + (j-1)/n_per_latent * (ubs[2] - lbs[2])
-                    lb3 = lbs[3] + (k-1)/n_per_state * (ubs[3] - lbs[3])
-                    lb4 = lbs[4] + (l-1)/n_per_state * (ubs[4] - lbs[4])
-                    ub1 = lbs[1] + (i)/n_per_latent * (ubs[1] - lbs[1])
-                    ub2 = lbs[2] + (j)/n_per_latent * (ubs[2] - lbs[2])
-                    ub3 = lbs[3] + (k)/n_per_state * (ubs[3] - lbs[3])
-                    ub4 = lbs[4] + (l)/n_per_state * (ubs[4] - lbs[4])
-                    cur_lbs = [lb1, lb2, lb3, lb4]
-                    cur_ubs = [ub1, ub2, ub3, ub4]
-
-                    push!(lbs_disc, cur_lbs)
-                    push!(ubs_disc, cur_ubs)
-                end
-            end
-        end
-    end
-
-    return lbs_disc, ubs_disc
-end
-
 """ ai2zPQ functions """
 function ai2zPQ_bounds(network, lbs, ubs, coeffs)
     # Define functions
@@ -234,9 +178,9 @@ function ai2zPQ_bounds_buffered(network_one, network_two, lbs, ubs, coeffs, buff
 end
 
 function ai2zPQ_bounds_buffered_breakdown(network_one, network_two, lbs, ubs, coeffs, buffer; n_steps=1000, solver=Ai2z(), early_stop=true, stop_freq=200, stop_gap=1e-4, initial_splits=200, verbosity=1)
-    x_max, lower_max, upper_max, steps = linear_opt_with_buffer_breakdown(network_one, network_two, lbs, ubs, coeffs, buffer; n_steps=n_steps, solver=solver, early_stop=early_stop, stop_freq=stop_freq, stop_gap=stop_gap, initial_splits=initial_splits, verbosity=verbosity)
+    @time x_max, lower_max, upper_max, steps = linear_opt_with_buffer_breakdown(network_one, network_two, lbs, ubs, coeffs, buffer; n_steps=n_steps, solver=solver, early_stop=early_stop, stop_freq=stop_freq, stop_gap=stop_gap, initial_splits=initial_splits, verbosity=verbosity)
     max_val = upper_max
-    x_min, lower_min, upper_min, steps = linear_opt_with_buffer_breakdown(network_one, network_two, lbs, ubs, -coeffs, buffer; n_steps=n_steps, solver=solver, early_stop=early_stop, stop_freq=stop_freq, stop_gap=stop_gap, initial_splits=initial_splits, verbosity=verbosity)
+    @time x_min, lower_min, upper_min, steps = linear_opt_with_buffer_breakdown(network_one, network_two, lbs, ubs, -coeffs, buffer; n_steps=n_steps, solver=solver, early_stop=early_stop, stop_freq=stop_freq, stop_gap=stop_gap, initial_splits=initial_splits, verbosity=verbosity)
     min_val = -upper_min
     println("x max: ", x_max)
     println("Interval max: ", [lower_max, upper_max])
@@ -298,7 +242,7 @@ end
 function verify_tree_buffered_parallel!(tree, gan_network, control_network, full_network; coeffs = [-0.74, -0.44], latent_bound = 0.8)
     leaves, lbs, ubs = get_leaves_and_bounds(tree, latent_bound)
     # TODO: Remove this, temporary for testing with just a few queries
-    n = 20
+    n = 300
     leaves = leaves[1:n]
     lbs = lbs[1:n]
     ubs = ubs[1:n]
@@ -313,8 +257,12 @@ function verify_tree_buffered_parallel!(tree, gan_network, control_network, full
     tree_controls_rc = Dict()
     tree_controls = Dict()
 
+    start_time = time()
+
     for (i, (leaf, lb, ub)) in enumerate(zip(leaves, lbs, ubs))
-        if length(leaf.images) == 0
+        verify_lbs = [lb[1], lb[2], (lb[3:4] ./ [6.366468343804353, 17.248858791583547])...]
+        verify_ubs = [ub[1], ub[2], (ub[3:4] ./ [6.366468343804353, 17.248858791583547])...]
+        if true || length(leaf.images) == 0
             tree_controls_rc[i] = remotecall(ai2zPQ_bounds, mod(i-1, nprocs()-1) + 2, full_network, verify_lbs, verify_ubs, coeffs; n_steps=10000, stop_gap=1e-1, verbosity=0)
         else
             tree_controls_rc[i] = remotecall(ai2zPQ_bounds_buffered_breakdown, mod(i-1, nprocs()-1) + 2, gan_network, control_network, verify_lbs, verify_ubs, coeffs, leaf.buffer; n_steps=10000, stop_gap=1e-1, verbosity=0)
@@ -322,7 +270,14 @@ function verify_tree_buffered_parallel!(tree, gan_network, control_network, full
     end
 
     for (i, (leaf, lb, ub)) in enumerate(zip(leaves, lbs, ubs))
+        println("Fetch loop ", i)
+        percent_done = leafs_finished/total_leaves
+       
         tree_controls[i] = fetch(tree_controls_rc[i])
+
+        percent_done = i/total_leaves
+        println("Leafs fetched: ", i, "   ", round(100*percent_done, digits=2), "% done")
+        println("ETA: ", (1.0/percent_done - 1.0)*(time() - start_time) / 3600, " hours")
     end
 
     for (i, (leaf, lb, ub)) in enumerate(zip(leaves, lbs, ubs))
@@ -335,8 +290,8 @@ function verify_tree_buffered_parallel!(tree, gan_network, control_network, full
     # Threads.@threads for (leaf, lb, ub) in collect(zip(leaves, lbs, ubs))
     #     println("thread id: ", Threads.threadid())
     
-    #     verify_lbs = [lb[1], lb[2], (lb[3:4] ./ [6.366468343804353, 17.248858791583547])...]
-    #     verify_ubs = [ub[1], ub[2], (ub[3:4] ./ [6.366468343804353, 17.248858791583547])...]
+        # verify_lbs = [lb[1], lb[2], (lb[3:4] ./ [6.366468343804353, 17.248858791583547])...]
+        # verify_ubs = [ub[1], ub[2], (ub[3:4] ./ [6.366468343804353, 17.248858791583547])...]
     #     println("----Starting query with ", length(leaf.images), " images----")
     #     if length(leaf.images) == 0
     #         @time min_control, max_control = ai2zPQ_bounds(full_network, verify_lbs, verify_ubs, coeffs; n_steps=10000, stop_gap=1e-1, verbosity=0)
@@ -429,7 +384,6 @@ function verify_tree_buffered!(tree, gan_network, control_network, full_network;
     push!(s, tree.root_node)
 
     # Introduce some variables to track progress
-    leafs_finished = 0
     total_leaves = length(get_leaves(tree))
     start_time = now()
 

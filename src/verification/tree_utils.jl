@@ -120,7 +120,7 @@ end
 get_leaves(tree::KDTREE) = get_leaves(tree.root_node)
 
 
-function get_bounds(tree)
+function get_tree_bounds(tree)
     lbs = []
     ubs = []
     
