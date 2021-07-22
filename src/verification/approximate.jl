@@ -1,5 +1,4 @@
 @everywhere using NeuralVerification
-<<<<<<< HEAD
 @everywhere using NeuralVerification: init_vars, get_bounds, add_set_constraint!, BoundedMixedIntegerLP, encode_network!, compute_output, _ẑᵢ₊₁, TOL
 @everywhere using LazySets
 @everywhere using LazySets: translate
@@ -16,9 +15,6 @@ const GRB_ENV = Gurobi.Env()
 network = read_nnet("./models/full_mlp_best_conv.nnet")
 gan_network = read_nnet("./models/mlp_gen_best_conv_rescaled.nnet")
 control_network = read_nnet("models/KJ_TaxiNet.nnet")
-
-const TOL = Ref(sqrt(eps()))
-
 
 """ ai2zPQ functions """
 function ai2zPQ_bounds(network, lbs, ubs, coeffs)
