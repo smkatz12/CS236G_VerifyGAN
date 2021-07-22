@@ -1,11 +1,14 @@
+@everywhere using Pkg 
+@everywhere Pkg.activate(".")
+
 using HDF5
 using NeuralVerification
 using NeuralVerification: compute_output
 using BSON: @save, @load
 
-include("./src/verification/tree_utils.jl")
-include("./src/verification/approximate.jl")
-include("./src/verification/buffer_utils.jl")
+@everywhere include("./src/verification/tree_utils.jl")
+@everywhere include("./src/verification/approximate.jl")
+@everywhere include("./src/verification/buffer_utils.jl")
 
 # Load your networks
 full_network_file = "./models/full_mlp_best_conv.nnet"
@@ -58,7 +61,7 @@ state = [0.0, 0.0]
 
 verify_tree_buffered_parallel!(tree, gan_network, control_network, full_network)
 
-#@save "./src/verification/verified_trees/buffer_breakdown_1000samples.bson" tree
+@save "./src/verification/verified_trees/buffer_breakdown_1000samples.bson" tree
 
 ### Test running a linear optimization with a zonotope input
 # input_set = rand(Zonotope, dim=4)
