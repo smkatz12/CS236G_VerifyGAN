@@ -1,4 +1,5 @@
 @everywhere using NeuralVerification
+<<<<<<< HEAD
 @everywhere using NeuralVerification: init_vars, get_bounds, add_set_constraint!, BoundedMixedIntegerLP, encode_network!, compute_output, _ẑᵢ₊₁, TOL
 @everywhere using LazySets
 @everywhere using LazySets: translate
@@ -319,6 +320,7 @@ function verify_tree_buffered_parallel!(tree, gan_network, control_network, full
     for (i, (leaf, lb, ub)) in enumerate(zip(leaves, lbs, ubs))
         verify_lbs = [lb[1], lb[2], (lb[3:4] ./ [6.366468343804353, 17.248858791583547])...]
         verify_ubs = [ub[1], ub[2], (ub[3:4] ./ [6.366468343804353, 17.248858791583547])...]
+        println("lbs, ubs normalized: ", verify_lbs, verify_ubs)
         if length(leaf.images) == 0
             tree_controls_rc[i] = remotecall(ai2zPQ_bounds, mod(i-1, nprocs()-1) + 2, full_network, verify_lbs, verify_ubs, coeffs; n_steps=10000, stop_gap=1e-1, verbosity=0)
         else
@@ -341,8 +343,9 @@ function verify_tree_buffered_parallel!(tree, gan_network, control_network, full
     # Threads.@threads for (leaf, lb, ub) in collect(zip(leaves, lbs, ubs))
     #     println("thread id: ", Threads.threadid())
     
-        # verify_lbs = [lb[1], lb[2], (lb[3:4] ./ [6.366468343804353, 17.248858791583547])...]
-        # verify_ubs = [ub[1], ub[2], (ub[3:4] ./ [6.366468343804353, 17.248858791583547])...]
+    # verify_lbs = [lb[1], lb[2], (lb[3:4] ./ [6.366468343804353, 17.248858791583547])...]
+    # verify_ubs = [ub[1], ub[2], (ub[3:4] ./ [6.366468343804353, 17.248858791583547])...]
+
     #     println("----Starting query with ", length(leaf.images), " images----")
     #     if length(leaf.images) == 0
     #         @time min_control, max_control = ai2zPQ_bounds(full_network, verify_lbs, verify_ubs, coeffs; n_steps=10000, stop_gap=1e-1, verbosity=0)
