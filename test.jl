@@ -1,14 +1,17 @@
-@everywhere using Pkg 
-@everywhere Pkg.activate(".")
 
 using HDF5
 using NeuralVerification
 using NeuralVerification: compute_output
-using BSON: @save, @load
+using Distributed
+
+@everywhere using Pkg 
+@everywhere Pkg.activate(".")
+
+@everywhere using BSON:@save, @load
 
 @everywhere include("./src/verification/tree_utils.jl")
 @everywhere include("./src/verification/approximate.jl")
-@everywhere include("./src/verification/buffer_utils.jl")
+#@everywhere include("./src/verification/buffer_utils.jl")
 
 # Load your networks
 full_network_file = "./models/full_mlp_best_conv.nnet"
@@ -40,28 +43,29 @@ ubs = [11.0, 30.0]
 @load "./src/verification/verified_trees/tree_1000samples_preverification.bson" tree
 # For the given state visualize the buffer and images, and then find the max / min control 
 # with and without the buffer
-state = [0.0, 0.0]
+state = [8.0, 20.0]
 # visualize_buffer("./plots/buffer", tree, state)
 # plot_images_from_tree("./plots/images", tree, state)
 
-# buffer = get_buffer(tree, state)
+#buffer = get_buffer(tree, state)
+buffer = Hyperrectangle(zeros(128), 0.01 * ones(128))
 
-# lb_verify = [-0.8, -0.8, (state ./ [6.366468343804353, 17.248858791583547])...]
-# ub_verify = [0.8, 0.8, (state ./ [6.366468343804353, 17.248858791583547])...]
-# @time min_val_buffer, max_val_buffer = ai2zPQ_bounds_buffered(gan_network, control_network, lb_verify, ub_verify, coeffs, buffer; n_steps=1000)
-# @time min_val_linear, max_val_linear = max_min_linear(full_network, lb_verify, ub_verify, coeffs; n_steps=1000)
-# @time min_val_buffer_breakdown, max_val_buffer_breakdown = ai2zPQ_bounds_buffered_breakdown(gan_network, control_network, lb_verify, ub_verify, coeffs, buffer; n_steps=1000, stop_freq = 50, stop_gap=1e-1, initial_splits=0)
+lb_verify = [-0.8, -0.8, (state ./ [6.366468343804353, 17.248858791583547])...]
+ub_verify = [0.8, 0.8, ((state ./ [6.366468343804353, 17.248858791583547]) .+ 0.027)...]
+time_buffer = @elapsed min_val_buffer, max_val_buffer = ai2zPQ_bounds_buffered(gan_network, control_network, lb_verify, ub_verify, coeffs, buffer; n_steps=1000)
+time_linear = @elapsed min_val_linear, max_val_linear = ai2zPQ_bounds(full_network, lb_verify, ub_verify, coeffs; n_steps=1000)
+time_buffer_breakdown = @elapsed min_val_buffer_breakdown, max_val_buffer_breakdown = ai2zPQ_bounds_buffered_breakdown(gan_network, control_network, lb_verify, ub_verify, coeffs, buffer; n_steps=1000, stop_freq = 50, stop_gap=1e-1, initial_splits=0)
 
+println("Min, max with linear: ", [min_val_linear, max_val_linear], " Time: ", time_linear)
+println("Min, max with buffer: ", [min_val_buffer, max_val_buffer], " Time: ", time_buffer)
+println("Min, max with buffer breakdown: ", [min_val_buffer_breakdown, max_val_buffer_breakdown], " Time: ", time_buffer_breakdown)
 
-# println("Min, max with linear: ", [min_val_linear, max_val_linear])
-# println("Min, max with buffer: ", [min_val_buffer, max_val_buffer])
-# println("Min, max with buffer breakdown: ", [min_val_buffer_breakdown, max_val_buffer_breakdown])
 
 #verify_tree_buffered!(tree, gan_network, control_network, full_network)
 
-verify_tree_buffered_parallel!(tree, gan_network, control_network, full_network)
+verify_tree_buffered_parallel!(tree, gan_network, control_network, full_network; default_buffer=Hyperrectangle(zeros(128), 0.01 .* ones(128)), use_leaf_buffers=false)
 
-@save "./src/verification/verified_trees/buffer_breakdown_1000samples.bson" tree
+@save "./src/verification/verified_trees/uniformbuffer_0.01_tree.bson" tree
 
 ### Test running a linear optimization with a zonotope input
 # input_set = rand(Zonotope, dim=4)
@@ -115,3 +119,4 @@ verify_tree_buffered_parallel!(tree, gan_network, control_network, full_network)
 # ntails = @parallel (+) for i = 1:1000
 #     rand(Bool)
 # end
+

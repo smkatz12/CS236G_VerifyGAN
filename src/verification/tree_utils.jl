@@ -80,7 +80,7 @@ function get_leaves_and_bounds(tree, latent_bound)
     push!(s, tree.root_node)
 
     while !(isempty(s))
-        println(length(s))
+        #println(length(s))
         curr = pop!(s)
         curr_lbs = pop!(lb_s)
         curr_ubs = pop!(ub_s)

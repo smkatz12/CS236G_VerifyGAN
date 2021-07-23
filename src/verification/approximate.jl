@@ -1,5 +1,5 @@
 @everywhere using NeuralVerification
-@everywhere using NeuralVerification: init_vars, get_bounds, add_set_constraint!, BoundedMixedIntegerLP, encode_network!, compute_output
+@everywhere using NeuralVerification: init_vars, get_bounds, add_set_constraint!, BoundedMixedIntegerLP, encode_network!, compute_output, _ẑᵢ₊₁, TOL
 @everywhere using LazySets
 @everywhere using LazySets: translate
 @everywhere using DataStructures
@@ -9,14 +9,12 @@
 @everywhere using Distributed
 const GRB_ENV = Gurobi.Env()
 
-@everywhere include("./src/verification/ai2zPQ.jl")
-@everywhere include("./src/verification/tree_utils.jl")
+@everywhere include(string(@__DIR__, "/ai2zPQ.jl"))
+@everywhere include(string(@__DIR__, "/tree_utils.jl"))
 
 network = read_nnet("./models/full_mlp_best_conv.nnet")
 gan_network = read_nnet("./models/mlp_gen_best_conv_rescaled.nnet")
 control_network = read_nnet("models/KJ_TaxiNet.nnet")
-
-const TOL = Ref(sqrt(eps()))
 
 """ ai2zPQ functions """
 function ai2zPQ_bounds(network, lbs, ubs, coeffs)
@@ -69,12 +67,12 @@ begin
 end
 
 
-function mip_linear_opt_value_only(network, input_set::Union{Hyperrectangle, Zonotope}, coeffs)
+function mip_linear_opt_value_only_old(network, input_set::Union{Hyperrectangle, Zonotope}, coeffs)
     # Get your bounds
     bounds = NeuralVerification.get_bounds(Ai2z(), network, input_set; before_act=true)
 
     # Create your model
-    model = Model(with_optimizer(() -> Gurobi.Optimizer(GRB_ENV), OutputFlag=0, Threads=8, TimeLimit=300.0))
+    model = Model(with_optimizer(() -> Gurobi.Optimizer(GRB_ENV), OutputFlag=0, Threads=1, TimeLimit=300.0))
     z = init_vars(model, network, :z, with_input=true)
     δ = init_vars(model, network, :δ, binary=true)
     # get the pre-activation bounds:
@@ -95,6 +93,64 @@ function mip_linear_opt_value_only(network, input_set::Union{Hyperrectangle, Zon
         @assert false "Non optimal result"
     end
 end
+
+
+"""
+
+objective_threshold gives a value above which 
+"""
+function mip_linear_opt_value_only(network, input_set::Union{Hyperrectangle, Zonotope}, coeffs)
+    # Get your bounds
+    bounds = NeuralVerification.get_bounds(Ai2z(), network, input_set; before_act=true)
+
+    # Create your model
+    model = Model(with_optimizer(() -> Gurobi.Optimizer(GRB_ENV), OutputFlag=0, Threads=1, TimeLimit=600.0))
+    z = init_vars(model, network, :z, with_input=true)
+    δ = init_vars(model, network, :δ, binary=true)
+    # get the pre-activation bounds:
+    model[:bounds] = bounds
+    model[:before_act] = true
+
+    # Add the input constraint 
+    NeuralVerification.add_set_constraint!(model, input_set, first(z))
+
+    # Encode the network as an MIP
+    encode_network!(model, network, BoundedMixedIntegerLP())
+    
+    # Set lower and upper bounds 
+    #for the first layer it's special because it has no ẑ
+    set_lower_bound.(z[1], low(bounds[1]))
+    set_upper_bound.(z[1], high(bounds[1]))
+    for i = 2:length(z)-1
+        # Set lower and upper bounds for the intermediate layers
+        ẑ_i =  _ẑᵢ₊₁(model, i-1)
+        z_i = z[i]
+        # @constraint(model, ẑ_i .>= low(bounds[i])) These empirically seem to slow it down?
+        # @constraint(model, ẑ_i .<= high(bounds[i]))
+        z_low = max.(low(bounds[i]), 0.0)
+        z_high = max.(high(bounds[i]), 0.0)
+        set_lower_bound.(z_i, z_low)
+        set_upper_bound.(model[:z][i], z_high)
+    end
+    # Set lower and upper bounds for the last layer special because 
+    # it has no ReLU
+    set_lower_bound.(z[end], low(bounds[end]))
+    set_upper_bound.(z[end], high(bounds[end]))
+    
+    # Set the objective 
+    @objective(model, Max, coeffs'*last(z))
+
+    optimize!(model)
+    if termination_status(model) == OPTIMAL
+        return objective_value(model)
+    elseif termination_status(model) == INFEASIBLE
+        @warn "Infeasible result, did you have an output threshold? If not, then it should never return infeasible"
+        return maximize ? -Inf : Inf  
+    else
+        @assert false "Non optimal result"
+    end
+end
+
 
 function mip_linear_opt(network, input_set::Union{Hyperrectangle, Zonotope}, coeffs)
     # Get your bounds
@@ -239,13 +295,13 @@ function verify_tree!(tree, network; get_control_bounds = ai2zPQ_bounds, coeffs 
     end
 end
 
-function verify_tree_buffered_parallel!(tree, gan_network, control_network, full_network; coeffs = [-0.74, -0.44], latent_bound = 0.8)
+function verify_tree_buffered_parallel!(tree, gan_network, control_network, full_network; coeffs = [-0.74, -0.44], latent_bound = 0.8, use_leaf_buffers=false, default_buffer=Hyperrectangle(zeros(128), 0.01*ones(128)))
     leaves, lbs, ubs = get_leaves_and_bounds(tree, latent_bound)
     # TODO: Remove this, temporary for testing with just a few queries
-    n = 300
-    leaves = leaves[1:n]
-    lbs = lbs[1:n]
-    ubs = ubs[1:n]
+    #n = 10
+    #leaves = leaves[1:n]
+    #lbs = lbs[1:n]
+    #ubs = ubs[1:n]
     println("leaf 1 min, max before: ", [leaves[1].min_control, leaves[1].max_control])
 
     # Compute the appropriate controls 
@@ -262,16 +318,24 @@ function verify_tree_buffered_parallel!(tree, gan_network, control_network, full
     for (i, (leaf, lb, ub)) in enumerate(zip(leaves, lbs, ubs))
         verify_lbs = [lb[1], lb[2], (lb[3:4] ./ [6.366468343804353, 17.248858791583547])...]
         verify_ubs = [ub[1], ub[2], (ub[3:4] ./ [6.366468343804353, 17.248858791583547])...]
-        if true || length(leaf.images) == 0
-            tree_controls_rc[i] = remotecall(ai2zPQ_bounds, mod(i-1, nprocs()-1) + 2, full_network, verify_lbs, verify_ubs, coeffs; n_steps=10000, stop_gap=1e-1, verbosity=0)
-        else
-            tree_controls_rc[i] = remotecall(ai2zPQ_bounds_buffered_breakdown, mod(i-1, nprocs()-1) + 2, gan_network, control_network, verify_lbs, verify_ubs, coeffs, leaf.buffer; n_steps=10000, stop_gap=1e-1, verbosity=0)
-        end
+
+        println("lbs, ubs normalized: ", verify_lbs, verify_ubs)
+        #if length(leaf.images) == 0
+        #    tree_controls_rc[i] = remotecall(ai2zPQ_bounds, mod(i-1, nprocs()-1) + 2, full_network, verify_lbs, verify_ubs, coeffs; n_steps=10000, stop_gap=1e-1, verbosity=0)
+        #else
+        #    tree_controls_rc[i] = remotecall(ai2zPQ_bounds_buffered_breakdown, mod(i-1, nprocs()-1) + 2, gan_network, control_network, verify_lbs, verify_ubs, coeffs, leaf.buffer; n_steps=10000, stop_gap=1e-1, verbosity=0)
+        #end
+	buffer = default_buffer
+	if use_leaf_buffers
+		buffer = leaf.buffer
+	end
+	#println("Buffer: ", buffer)
+	#println("nprocs: ", nprocs())
+	tree_controls_rc[i] = remotecall(ai2zPQ_bounds_buffered_breakdown, mod(i-1, nprocs()-1) + 2, gan_network, control_network, verify_lbs, verify_ubs, coeffs, buffer; n_steps=100000, stop_gap=1e-1, verbosity=0)
     end
 
     for (i, (leaf, lb, ub)) in enumerate(zip(leaves, lbs, ubs))
         println("Fetch loop ", i)
-        percent_done = leafs_finished/total_leaves
        
         tree_controls[i] = fetch(tree_controls_rc[i])
 
@@ -284,6 +348,8 @@ function verify_tree_buffered_parallel!(tree, gan_network, control_network, full
         leaf.min_control = tree_controls[i][1]
         leaf.max_control = tree_controls[i][2]
     end
+
+    println("Total time: ", (time() - start_time) / 3600)
     # lk = ReentrantLock()
     # println("Start of mapping function")
 
@@ -292,6 +358,7 @@ function verify_tree_buffered_parallel!(tree, gan_network, control_network, full
     
         # verify_lbs = [lb[1], lb[2], (lb[3:4] ./ [6.366468343804353, 17.248858791583547])...]
         # verify_ubs = [ub[1], ub[2], (ub[3:4] ./ [6.366468343804353, 17.248858791583547])...]
+
     #     println("----Starting query with ", length(leaf.images), " images----")
     #     if length(leaf.images) == 0
     #         @time min_control, max_control = ai2zPQ_bounds(full_network, verify_lbs, verify_ubs, coeffs; n_steps=10000, stop_gap=1e-1, verbosity=0)
